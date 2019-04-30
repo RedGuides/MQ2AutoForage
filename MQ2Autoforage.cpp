@@ -103,7 +103,7 @@ PLUGIN_API VOID OnPulse(VOID)
     PSPAWNINFO pChSpawn = GetCharInfo()->pSpawn;
     PCHARINFO pCharInfo = NULL;
 
-    if ((IsForaging) && !(*EQADDR_ATTACK > 0) && !(PCSIDLWND)pSpellBookWnd->dShow && !(PCSIDLWND)pGiveWnd->dShow && !(PCSIDLWND)pBankWnd->dShow && !(PCSIDLWND)pMerchantWnd->dShow && !(PCSIDLWND)pTradeWnd->dShow && !(PCSIDLWND)pLootWnd->dShow)// && !GetCharInfo()->pSpawn->Mount) {
+    if ((IsForaging) && !(*EQADDR_ATTACK > 0) && !(PCSIDLWND)pSpellBookWnd->IsVisible() && !(PCSIDLWND)pGiveWnd->IsVisible() && !(PCSIDLWND)pBankWnd->IsVisible() && !(PCSIDLWND)pMerchantWnd->IsVisible() && !(PCSIDLWND)pTradeWnd->IsVisible() && !(PCSIDLWND)pLootWnd->IsVisible())// && !GetCharInfo()->pSpawn->Mount) {
     {
         //if (CheckAbilityReady("Tracking")) {
         //DoAbility(pChSpawn,"Tracking");
