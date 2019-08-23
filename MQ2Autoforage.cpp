@@ -39,6 +39,7 @@ bool WasSitting=false;
 bool AutoKeepEnabled=true;
 bool AutoAddEnabled=true;
 bool MQ2ForageEnabled=false;
+bool IAmCamping = false;
 
 // Added by Jaq -- Ripped off from mq2MoveUtils
 bool IsBardClass(void);
@@ -103,7 +104,7 @@ PLUGIN_API VOID OnPulse(VOID)
     PSPAWNINFO pChSpawn = GetCharInfo()->pSpawn;
     PCHARINFO pCharInfo = NULL;
 
-    if ((IsForaging) && !(*EQADDR_ATTACK > 0) && !(PCSIDLWND)pSpellBookWnd->IsVisible() && !(PCSIDLWND)pGiveWnd->IsVisible() && !(PCSIDLWND)pBankWnd->IsVisible() && !(PCSIDLWND)pMerchantWnd->IsVisible() && !(PCSIDLWND)pTradeWnd->IsVisible() && !(PCSIDLWND)pLootWnd->IsVisible())// && !GetCharInfo()->pSpawn->Mount) {
+    if ((IsForaging) && !(*EQADDR_ATTACK > 0) && !(PCSIDLWND)pSpellBookWnd->IsVisible() && !(PCSIDLWND)pGiveWnd->IsVisible() && !(PCSIDLWND)pBankWnd->IsVisible() && !(PCSIDLWND)pMerchantWnd->IsVisible() && !(PCSIDLWND)pTradeWnd->IsVisible() && !(PCSIDLWND)pLootWnd->IsVisible() && !IAmCamping)// && !GetCharInfo()->pSpawn->Mount) {
     {
         //if (CheckAbilityReady("Tracking")) {
         //DoAbility(pChSpawn,"Tracking");
@@ -141,6 +142,12 @@ PLUGIN_API DWORD OnIncomingChat(PCHAR Line, DWORD Color)
         KeepItem=false;
         KeepDestroy=false;
     }
+    else if (!IAmCamping && strstr(Line, "It will take you about 30 seconds to prepare your camp.")) {
+		IAmCamping = true;
+	}
+	else if (IAmCamping && strstr(Line, "You abandon your preparations to camp.")) {
+		IAmCamping = false;
+	}
     return 0;
 }
 
