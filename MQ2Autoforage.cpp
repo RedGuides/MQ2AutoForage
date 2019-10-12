@@ -76,6 +76,9 @@ PLUGIN_API VOID ShutdownPlugin(VOID)
 
 PLUGIN_API VOID OnZoned(VOID)
 {
+	//If I switch characters and IAmCamping is still true and I finish zoning, and the gamestate is ingame...
+	if (IAmCamping && GetGameState() == GAMESTATE_INGAME)
+		IAmCamping = false;
     Load_INI();
 }
 
