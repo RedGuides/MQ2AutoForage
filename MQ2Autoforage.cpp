@@ -10,11 +10,20 @@
    
    Changelog:
    7/26/2016 - v2.0 - Fixed for string safety patch and cleaned up code (watlol)
+   10/26/2019 - 2.1 - ChatWithThisName && Sic
+						No longer requires a hotkey in "Actions" to use forage.
+						Added new functions MyUseAbility, AbilityReady, atob, InGame
+						and VerifyINI. 
+						Added Keeping the last state for /startforage and /stopforage
+						Defaults to on. It's assumed if they loaded the plugin that they
+						wanted to start foraging.
+						Significantly slowed down the plugin, to only check forage to be
+						ready once every 100 pulses. 
 */
 
 #define   PLUGIN_NAME   "MQ2AutoForage"
-#define   PLUGIN_DATE   20160726
-#define   PLUGIN_VERS   2.00
+#define   PLUGIN_DATE   20191026
+#define   PLUGIN_VERS   2.1
 
 #include "../MQ2Plugin.h"
 
@@ -25,10 +34,14 @@ void StartForageCommand(PSPAWNINFO pChar, PCHAR szLine);
 void StopForageCommand(PSPAWNINFO pChar, PCHAR szLine);
 void KeepItemCommand(PSPAWNINFO pChar, PCHAR szLine);
 void DestroyItemCommand(PSPAWNINFO pChar, PCHAR szLine);
-bool CheckAbilityReady(PCHAR szSkillName);
+void MyUseAbility(PCHAR szLine);
+bool AbilityReady(PCHAR szSkillName);
+bool atob(char x[MAX_STRING]);
+inline bool InGame();
 void HandleItem(PCHARINFO pCharInfo);
 void Load_INI(VOID);
 bool Check_INI(VOID);
+void VerifyINI(char Section[MAX_STRING], char Key[MAX_STRING], char Default[MAX_STRING], char ININame[MAX_STRING]);
 
 bool IsForaging=false;
 bool HasForaged=false;
@@ -40,6 +53,8 @@ bool AutoKeepEnabled=true;
 bool AutoAddEnabled=true;
 bool MQ2ForageEnabled=false;
 bool IAmCamping = false;
+int Pulse = 99;
+const int PulseDelay = 100;
 
 // Added by Jaq -- Ripped off from mq2MoveUtils
 bool IsBardClass(void);
@@ -100,6 +115,11 @@ DWORD __stdcall WaitForCursor(PVOID pData)
 }
 PLUGIN_API VOID OnPulse(VOID)
 {
+	if (!InGame())
+		return;
+	if (++Pulse < PulseDelay) return;
+	Pulse = 0;
+	//WriteChatf("Pulsing");
     if (!MQ2ForageEnabled)
     {
         return;
@@ -109,16 +129,13 @@ PLUGIN_API VOID OnPulse(VOID)
 
     if ((IsForaging) && !(*EQADDR_ATTACK > 0) && !(PCSIDLWND)pSpellBookWnd->IsVisible() && !(PCSIDLWND)pGiveWnd->IsVisible() && !(PCSIDLWND)pBankWnd->IsVisible() && !(PCSIDLWND)pMerchantWnd->IsVisible() && !(PCSIDLWND)pTradeWnd->IsVisible() && !(PCSIDLWND)pLootWnd->IsVisible() && !IAmCamping)// && !GetCharInfo()->pSpawn->Mount) {
     {
-        //if (CheckAbilityReady("Tracking")) {
-        //DoAbility(pChSpawn,"Tracking");
-        //}
-        if (CheckAbilityReady("Forage")) {
+        if (AbilityReady("Forage")) {
             if (pChSpawn->StandState == STANDSTATE_SIT) {
                 DoCommand(pChSpawn, "/stand");
                 WasSitting=true;
             } else if (((PSPAWNINFO)pLocalPlayer)->CastingData.SpellETA == 0 || (IsBardClass())) {
                 HasForaged=true;
-                DoAbility(pChSpawn,"Forage");
+                MyUseAbility("Forage");
             }
         }
     }
@@ -155,7 +172,7 @@ PLUGIN_API DWORD OnIncomingChat(PCHAR Line, DWORD Color)
 }
 
 
-PLUGIN_API void SetGameState(DWORD GameState)
+PLUGIN_API VOID SetGameState(DWORD GameState)
 {
     if (GameState==GAMESTATE_INGAME)
     {
@@ -178,6 +195,7 @@ void StartForageCommand(PSPAWNINFO pChar, PCHAR szLine)
     {
 		WriteChatf("%s::Forage [\agEnabled\aw].",PLUGIN_NAME);
         IsForaging=true;
+		WritePrivateProfileString("General", "ForageOn", "On", INIFileName);
     }
 }
 
@@ -187,6 +205,7 @@ void StopForageCommand(PSPAWNINFO pChar, PCHAR szLine)
     {
 		WriteChatf("%s::Forage [\arDisabled\aw].",PLUGIN_NAME);
         IsForaging=false;
+		WritePrivateProfileString("General", "ForageOn", "Off", INIFileName);
     }
 }
 
@@ -216,38 +235,59 @@ void DestroyItemCommand(PSPAWNINFO pChar, PCHAR szLine)
     }
 }
 
-bool CheckAbilityReady(PCHAR szSkillName)
+void MyUseAbility(PCHAR szLine) {
+	if (PSPAWNINFO pChSpawn = GetCharInfo()->pSpawn) {
+		char temp[MAX_STRING] = "";
+		sprintf_s(temp, "\"%s", szLine);
+		strcat_s(temp, MAX_STRING, "\"");
+		DoAbility(pChSpawn, temp);
+	}
+}
+
+bool AbilityReady(PCHAR szSkillName)
 {
-    for (DWORD nSkill=0;szSkills[nSkill];nSkill++)
-    {
-        if (!_stricmp(szSkillName,szSkills[nSkill]))
-        {
-            if (GetCharInfo2()->Skill[nSkill]>300)
-            {
-                return false;
-            }
-            for (DWORD nAbility=0;nAbility<10;nAbility++)
-            {
-                if (EQADDR_DOABILITYLIST[nAbility] == nSkill)
-                {
-                    if (nAbility<4)
-                    {
-                        nAbility+=7;
-                    }
-                    else
-                    {
-                        nAbility-=3;
-                    }
-                    //if (pSkillMgr->pSkill[nSkill]->SkillCombatType==2) {
-                    //return gbAltTimerReady?true:false;
-                    //} else {
-                    return pCSkillMgr->IsAvailable(nSkill)?true:false;
-                    //}
-                }
-            }
-        }
-    }
-    return false;
+	if (!InGame())
+		return false;
+	PSPAWNINFO me = GetCharInfo()->pSpawn;
+	for (int i = 0; i < NUM_SKILLS; i++) {
+		DWORD nToken = pCSkillMgr->GetNameToken(i);
+		if (HasSkill(i)) {
+			if (char* thename = pStringTable->getString(nToken, 0)) {
+				if (!_stricmp(szSkillName, thename))
+				{
+					if (bool bActivated = pCSkillMgr->IsActivatedSkill(i))
+					{
+						return pCSkillMgr->IsAvailable(i);
+					}
+					break;
+				}
+			}
+		}
+	}
+	return false;
+}
+
+inline bool InGame()
+{
+	return(GetGameState() == GAMESTATE_INGAME && GetCharInfo() && GetCharInfo()->pSpawn && GetCharInfo2());
+}
+
+void VerifyINI(char Section[MAX_STRING], char Key[MAX_STRING], char Default[MAX_STRING], char ININame[MAX_STRING])
+{
+	char temp[MAX_STRING] = { 0 };
+	if (GetPrivateProfileString(Section, Key, 0, temp, MAX_STRING, ININame) == 0)
+	{
+		WritePrivateProfileString(Section, Key, Default, ININame);
+	}
+}
+
+bool atob(char x[MAX_STRING])
+{
+	for (int i = 0; i < 4; i++)
+		x[i] = tolower(x[i]);
+	if (!_stricmp(x, "true") || atoi(x) != 0 || !_stricmp(x, "on"))
+		return true;
+	return false;
 }
 
 void HandleItem(PCHARINFO pCharInfo)
@@ -286,35 +326,21 @@ void HandleItem(PCHARINFO pCharInfo)
 
 void Load_INI(VOID)
 {
-    char szTemp[MAX_STRING];
-    GetPrivateProfileString("General","AutoKeepAll","NULL",szTemp,MAX_STRING,INIFileName);
-    if (strstr(szTemp,"NULL"))
-    {
-		WriteChatf("%s::INI not found, creating defaults.",PLUGIN_NAME);
-        WritePrivateProfileString("General","AutoKeepAll","on",INIFileName);
-        WritePrivateProfileString("General","AutoAddAll","on",INIFileName);
-    }
-    else
-    {
-        GetPrivateProfileString("General","AutoKeepAll","NULL",szTemp,MAX_STRING,INIFileName);
-        if ((strcmp(szTemp,"NULL"))||strcmp(szTemp,"on"))
-        {
-            AutoKeepEnabled=true;
-        }
-        else
-        {
-            AutoKeepEnabled=false;
-        }
-    }
-    GetPrivateProfileString("General","AutoAddAll","NULL",szTemp,MAX_STRING,INIFileName);
-    if ((strcmp(szTemp,"NULL"))||strcmp(szTemp,"on"))
-    {
-        AutoAddEnabled=true;
-    }
-    else
-    {
-        AutoAddEnabled=false;
-    }
+    char temp[MAX_STRING];
+	//AutoKeepEnabled/AutoKeepAll
+	VerifyINI("General", "AutoKeepAll", "on", INIFileName);
+	GetPrivateProfileString("General", "AutoKeepAll", "on", temp, MAX_STRING, INIFileName);
+	AutoKeepEnabled = atob(temp);
+
+	//AutoAddAll
+	VerifyINI("General", "AutoAddAll", "on", INIFileName);
+	GetPrivateProfileString("General", "AutoAddAll", "on", temp, MAX_STRING, INIFileName);
+	AutoAddEnabled = atob(temp);
+
+	//Saving the last state of the /startforage /stopforage default is On.
+	VerifyINI("General", "ForageOn", "on", INIFileName);
+	GetPrivateProfileString("General", "ForageOn", "on", temp, MAX_STRING, INIFileName);
+	IsForaging = atob(temp);
 }
 
 bool Check_INI(VOID)
