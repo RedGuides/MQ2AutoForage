@@ -14,7 +14,7 @@
     <ProjectGuid>{067315CC-16CD-4A20-BF1F-ABF292160BB2}</ProjectGuid>
     <RootNamespace>MQ2Autoforage</RootNamespace>
     <Keyword>Win32Proj</Keyword>
-    <WindowsTargetPlatformVersion>10.0.18362.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
     <SccProjectName>SAK</SccProjectName>
     <SccAuxPath>SAK</SccAuxPath>
     <SccLocalPath>SAK</SccLocalPath>
