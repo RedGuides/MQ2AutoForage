@@ -19,6 +19,7 @@
 						wanted to start foraging.
 						Significantly slowed down the plugin, to only check forage to be
 						ready once every 100 pulses. 
+	11/13/19 - 2.2 - Sic - Lowered pulsedelay to better avoid conflicts with other plugins and macros
 */
 
 #define   PLUGIN_NAME   "MQ2AutoForage"
@@ -54,7 +55,7 @@ bool AutoAddEnabled=true;
 bool MQ2ForageEnabled=false;
 bool IAmCamping = false;
 int Pulse = 99;
-const int PulseDelay = 100;
+const int PulseDelay = 25;
 
 // Added by Jaq -- Ripped off from mq2MoveUtils
 bool IsBardClass(void);
