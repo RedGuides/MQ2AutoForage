@@ -20,11 +20,13 @@
 						Significantly slowed down the plugin, to only check forage to be
 						ready once every 100 pulses. 
 	11/13/19 - 2.2 - Sic - Lowered pulsedelay to better avoid conflicts with other plugins and macros
+	11/26/19 - 2.3 - Eqmule - Removed Thread. Please don't create threads that call eq functions, they will race condition and crash eq.
+	                        - Fixed crash on full inventory.
 */
 
 #define   PLUGIN_NAME   "MQ2AutoForage"
-#define   PLUGIN_DATE   20191026
-#define   PLUGIN_VERS   2.1
+#define   PLUGIN_DATE   20191126
+#define   PLUGIN_VERS   2.3
 
 #include "../MQ2Plugin.h"
 
@@ -39,7 +41,7 @@ void MyUseAbility(PCHAR szLine);
 bool AbilityReady(PCHAR szSkillName);
 bool atob(char x[MAX_STRING]);
 inline bool InGame();
-void HandleItem(PCHARINFO pCharInfo);
+void HandleItem();
 void Load_INI(VOID);
 bool Check_INI(VOID);
 void VerifyINI(char Section[MAX_STRING], char Key[MAX_STRING], char Default[MAX_STRING], char ININame[MAX_STRING]);
@@ -47,6 +49,7 @@ void VerifyINI(char Section[MAX_STRING], char Key[MAX_STRING], char Default[MAX_
 bool IsForaging=false;
 bool HasForaged=false;
 bool ForageSuccess=false;
+bool bWaitForCursor = false;
 bool KeepDestroy=false;
 bool KeepItem=false;
 bool WasSitting=false;
@@ -98,27 +101,13 @@ PLUGIN_API VOID OnZoned(VOID)
     Load_INI();
 }
 
-DWORD __stdcall WaitForCursor(PVOID pData)
-{
-    PCHARINFO pCharInfo = (PCHARINFO)pData;
-    DWORD counter = 0;
-    while (!GetCharInfo2()->pInventoryArray->Inventory.Cursor && counter<200) //20 seconds should be enough even when laggy
-    {
-        Sleep(100);
-        counter++;
-    }
-    while (GetCharInfo2()->pInventoryArray->Inventory.Cursor)
-    {
-        HandleItem(pCharInfo);
-        Sleep(100);
-    }
-    return 0;
-}
+bool bHandleCalled = false;
 PLUGIN_API VOID OnPulse(VOID)
 {
 	if (!InGame())
 		return;
-	if (++Pulse < PulseDelay) return;
+	if (++Pulse < PulseDelay)
+		return;
 	Pulse = 0;
 	//WriteChatf("Pulsing");
     if (!MQ2ForageEnabled)
@@ -140,14 +129,34 @@ PLUGIN_API VOID OnPulse(VOID)
             }
         }
     }
-    if (ForageSuccess && IsForaging)
+    if (!bWaitForCursor && ForageSuccess && IsForaging)
     {
-        if (NULL == (pCharInfo = GetCharInfo()))
-            return;
-        DWORD nThreadID = 0;
-        CreateThread(NULL,0,WaitForCursor,pCharInfo,0,&nThreadID);
+		//WriteChatf("Turning ON bWaitForCursor");
+		bWaitForCursor = true;
         ForageSuccess = false;
     }
+	if (bWaitForCursor)
+	{
+		if (PCHARINFO2 pCharInfo2 = GetCharInfo2())
+		{
+			if (pCharInfo2->pInventoryArray->Inventory.Cursor)
+			{
+				if (!bHandleCalled)
+				{
+					//WriteChatf("Turning ON bHandleCalled");
+					bHandleCalled = true;
+				}
+				HandleItem();
+				return;
+			}
+			if (bHandleCalled && !pCharInfo2->pInventoryArray->Inventory.Cursor)
+			{
+				//WriteChatf("Turning off bHandleCalled and bWaitForCursor");
+				bHandleCalled = false;
+				bWaitForCursor = false;
+			}
+		}
+	}
 }
 
 PLUGIN_API DWORD OnIncomingChat(PCHAR Line, DWORD Color)
@@ -291,38 +300,71 @@ bool atob(char x[MAX_STRING])
 	return false;
 }
 
-void HandleItem(PCHARINFO pCharInfo)
+void HandleItem()
 {
-    CHAR szItem[64] = {0};
-    PSPAWNINFO pChSpawn = GetCharInfo()->pSpawn;
-    PITEMINFO pCursor = GetItemFromContents(GetCharInfo2()->pInventoryArray->Inventory.Cursor);
-    sprintf_s(szItem,"%s",pCursor->Name);
-    KeepDestroy=true;
-    KeepItem=Check_INI();
-    if (KeepItem)
-    {
-		WriteChatf("%s::Keeping [\ag%s\aw].",PLUGIN_NAME, szItem);
-        //DoCommand(pChSpawn, "/autoinventory");
-        HideDoCommand(pChSpawn, "/autoinventory",0);
-
-    }
-    else
-    {
-		WriteChatf("%s::Destroying [\ag%s\aw].",PLUGIN_NAME, szItem);
-        DoCommand(pChSpawn, "/destroy");
-    }
-    if (!GetCharInfo2()->pInventoryArray->Inventory.Cursor)
-    {
-        KeepDestroy=false;
-        KeepItem=false;
-        HasForaged=false;
-        ForageSuccess=false;
-    }
-    if (!ForageSuccess && WasSitting)
-    {
-        WasSitting=false;
-        DoCommand(pChSpawn, "/sit");
-    }
+	if (PSPAWNINFO pChSpawn = (PSPAWNINFO)pLocalPlayer)
+	{
+		if (PCHARINFO2 pChar2 = GetCharInfo2())
+		{
+			PCONTENTS pCont = pChar2->pInventoryArray->Inventory.Cursor;
+			if (PITEMINFO pCursor = GetItemFromContents(pCont))
+			{
+				CHAR szItem[64] = { 0 };
+				sprintf_s(szItem, "%s", pCursor->Name);
+				KeepDestroy = true;
+				KeepItem = Check_INI();
+				if (KeepItem)
+				{
+					int freeslots = GetFreeInventory(pCursor->Size);
+					if (freeslots <=1)
+					{
+						bool bTurnItOff = true;
+						//check if we can stack it
+						if (((EQ_Item*)pCont)->IsStackable())
+						{
+							int freestack = GetFreeStack(pCont);
+							if (freestack >= pCont->StackCount)
+							{
+								bTurnItOff = false;
+							}
+						}
+						if(bTurnItOff)
+						{
+							//Beep(1000, 100);
+							WriteChatf("%s::Turning \arOFF\aw Foraging, your inventory is FULL.", PLUGIN_NAME);
+							StopForageCommand((PSPAWNINFO)pLocalPlayer, "");
+							if (freeslots == 1)
+							{
+								HideDoCommand(pChSpawn, "/autoinventory", 0);
+							}
+							bWaitForCursor = false;
+							bHandleCalled = false;
+							return;
+						}
+					}
+					WriteChatf("%s::Keeping [\ag%s\aw].", PLUGIN_NAME, szItem);
+					HideDoCommand(pChSpawn, "/autoinventory", 0);
+				}
+				else
+				{
+					WriteChatf("%s::Destroying [\ag%s\aw].", PLUGIN_NAME, szItem);
+					DoCommand(pChSpawn, "/destroy");
+				}
+				if (!pChar2->pInventoryArray->Inventory.Cursor)
+				{
+					KeepDestroy = false;
+					KeepItem = false;
+					HasForaged = false;
+					ForageSuccess = false;
+				}
+				if (!ForageSuccess && WasSitting)
+				{
+					WasSitting = false;
+					DoCommand(pChSpawn, "/sit");
+				}
+			}
+		}
+	}
 }
 
 void Load_INI(VOID)
