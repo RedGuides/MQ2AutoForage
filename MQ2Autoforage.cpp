@@ -1,37 +1,35 @@
 /* MQ2AutoForage
 
    Simple plugin to automate the tast of foraging.
-   
+
    Syntax:
    /startforage         - commence autoforaging.
    /stopforage          - stop autoforaging.
    /keepitem {item}     - add/change the item in the .ini file to auto-keep.
    /destroyitem {item}  - add/change the item in the .ini file to auto-destroy.
-   
+
    Changelog:
    7/26/2016 - v2.0 - Fixed for string safety patch and cleaned up code (watlol)
    10/26/2019 - 2.1 - ChatWithThisName && Sic
-						No longer requires a hotkey in "Actions" to use forage.
-						Added new functions MyUseAbility, AbilityReady, atob, InGame
-						and VerifyINI. 
-						Added Keeping the last state for /startforage and /stopforage
-						Defaults to on. It's assumed if they loaded the plugin that they
-						wanted to start foraging.
-						Significantly slowed down the plugin, to only check forage to be
-						ready once every 100 pulses. 
-	11/13/19 - 2.2 - Sic - Lowered pulsedelay to better avoid conflicts with other plugins and macros
-	11/26/19 - 2.3 - Eqmule - Removed Thread. Please don't create threads that call eq functions, they will race condition and crash eq.
-	                        - Fixed crash on full inventory.
+                        No longer requires a hotkey in "Actions" to use forage.
+                        Added new functions MyUseAbility, AbilityReady, atob, InGame
+                        and VerifyINI.
+                        Added Keeping the last state for /startforage and /stopforage
+                        Defaults to on. It's assumed if they loaded the plugin that they
+                        wanted to start foraging.
+                        Significantly slowed down the plugin, to only check forage to be
+                        ready once every 100 pulses.
+    11/13/19 - 2.2 - Sic - Lowered pulsedelay to better avoid conflicts with other plugins and macros
+    11/26/19 - 2.3 - Eqmule - Removed Thread. Please don't create threads that call eq functions, they will race condition and crash eq.
+                            - Fixed crash on full inventory.
 */
-
-#define   PLUGIN_NAME   "MQ2AutoForage"
-#define   PLUGIN_DATE   20191126
-#define   PLUGIN_VERS   2.3
 
 #include "../MQ2Plugin.h"
 
+constexpr const char* PLUGIN_NAME = "MQ2AutoForage";
+
 PreSetup(PLUGIN_NAME);
-PLUGIN_VERSION(PLUGIN_VERS);
+PLUGIN_VERSION(2.3);
 
 void StartForageCommand(PSPAWNINFO pChar, PCHAR szLine);
 void StopForageCommand(PSPAWNINFO pChar, PCHAR szLine);
@@ -39,13 +37,12 @@ void KeepItemCommand(PSPAWNINFO pChar, PCHAR szLine);
 void DestroyItemCommand(PSPAWNINFO pChar, PCHAR szLine);
 void MyUseAbility(PCHAR szLine);
 bool AbilityReady(PCHAR szSkillName);
-bool atob(char x[MAX_STRING]);
 inline bool InGame();
 void HandleItem();
-void Load_INI(VOID);
-bool Check_INI(VOID);
-void VerifyINI(char Section[MAX_STRING], char Key[MAX_STRING], char Default[MAX_STRING], char ININame[MAX_STRING]);
+void Load_INI();
+bool Check_INI();
 
+// FIXME: Defaults here are different from the defaults in the INI settings.  Use this bool to inform the other setting rather than hardcode.
 bool IsForaging=false;
 bool HasForaged=false;
 bool ForageSuccess=false;
@@ -57,87 +54,86 @@ bool AutoKeepEnabled=true;
 bool AutoAddEnabled=true;
 bool MQ2ForageEnabled=false;
 bool IAmCamping = false;
-int Pulse = 99;
-const int PulseDelay = 25;
+bool bHandleCalled = false;
 
-// Added by Jaq -- Ripped off from mq2MoveUtils
-bool IsBardClass(void);
-
-PLUGIN_API VOID InitializePlugin(VOID)
+bool SetININame()
 {
-    AddCommand("/startforage",StartForageCommand);
-    AddCommand("/stopforage",StopForageCommand);
-    AddCommand("/keepitem",KeepItemCommand);
-    AddCommand("/destroyitem",DestroyItemCommand);
+	if (gGameState==GAMESTATE_INGAME && GetCharInfo())
+	{
+		sprintf_s(INIFileName,"%s\\MQ2Forage_%s_%s.ini", gszINIPath, GetCharInfo()->Name, EQADDR_SERVERNAME);
+		Load_INI();
+		return true;
+	}
 
-    if (MQ2Globals::gGameState==GAMESTATE_INGAME)
-    {
-        if (GetCharInfo())
-        {
-            sprintf_s(INIFileName,"%s\\MQ2Forage_%s_%s.ini",gszINIPath,GetCharInfo()->Name,EQADDR_SERVERNAME);
-            Load_INI();
-            MQ2ForageEnabled=true;
-        }
-    }
-    else
-    {
-        MQ2ForageEnabled=false;
-    }
+	return false;
 }
 
-PLUGIN_API VOID ShutdownPlugin(VOID)
+PLUGIN_API VOID InitializePlugin()
 {
-    RemoveCommand("/startforage");
-    RemoveCommand("/stopforage");
-    RemoveCommand("/keepitem");
-    RemoveCommand("/destroyitem");
+	AddCommand("/startforage",StartForageCommand);
+	AddCommand("/stopforage",StopForageCommand);
+	AddCommand("/keepitem",KeepItemCommand);
+	AddCommand("/destroyitem",DestroyItemCommand);
+	MQ2ForageEnabled = SetININame();
 }
 
-PLUGIN_API VOID OnZoned(VOID)
+PLUGIN_API VOID ShutdownPlugin()
+{
+	RemoveCommand("/startforage");
+	RemoveCommand("/stopforage");
+	RemoveCommand("/keepitem");
+	RemoveCommand("/destroyitem");
+}
+
+PLUGIN_API VOID OnZoned()
 {
 	//If I switch characters and IAmCamping is still true and I finish zoning, and the gamestate is ingame...
 	if (IAmCamping && GetGameState() == GAMESTATE_INGAME)
 		IAmCamping = false;
-    Load_INI();
+	Load_INI();
 }
 
-bool bHandleCalled = false;
-PLUGIN_API VOID OnPulse(VOID)
+PLUGIN_API VOID OnPulse()
 {
+	static int Pulse = 0;
+
 	if (!InGame())
 		return;
-	if (++Pulse < PulseDelay)
-		return;
-	Pulse = 0;
-	//WriteChatf("Pulsing");
-    if (!MQ2ForageEnabled)
-    {
-        return;
-    }
-    PSPAWNINFO pChSpawn = GetCharInfo()->pSpawn;
-    PCHARINFO pCharInfo = NULL;
 
-    if ((IsForaging) && !(*EQADDR_ATTACK > 0) && !(PCSIDLWND)pSpellBookWnd->IsVisible() && !(PCSIDLWND)pGiveWnd->IsVisible() && !(PCSIDLWND)pBankWnd->IsVisible() && !(PCSIDLWND)pMerchantWnd->IsVisible() && !(PCSIDLWND)pTradeWnd->IsVisible() && !(PCSIDLWND)pLootWnd->IsVisible() && !IAmCamping)// && !GetCharInfo()->pSpawn->Mount) {
-    {
-        if (AbilityReady("Forage")) {
-            if (pChSpawn->StandState == STANDSTATE_SIT) {
-                DoCommand(pChSpawn, "/stand");
-                WasSitting=true;
-            } else if (((PSPAWNINFO)pLocalPlayer)->CastingData.SpellETA == 0 || (IsBardClass())) {
-                HasForaged=true;
-                MyUseAbility("Forage");
-            }
-        }
-    }
-    if (!bWaitForCursor && ForageSuccess && IsForaging)
-    {
+	// Process every 25 pulses
+	if (++Pulse < 25)
+		return;
+
+	Pulse = 0;
+
+	//WriteChatf("Pulsing");
+	if (!MQ2ForageEnabled)
+	{
+		return;
+	}
+	PSPAWNINFO pChSpawn = GetCharInfo()->pSpawn;
+
+	if ((IsForaging) && !(*EQADDR_ATTACK > 0) && !(PCSIDLWND)pSpellBookWnd->IsVisible() && !(PCSIDLWND)pGiveWnd->IsVisible() && !(PCSIDLWND)pBankWnd->IsVisible() && !(PCSIDLWND)pMerchantWnd->IsVisible() && !(PCSIDLWND)pTradeWnd->IsVisible() && !(PCSIDLWND)pLootWnd->IsVisible() && !IAmCamping)// && !GetCharInfo()->pSpawn->Mount) {
+	{
+		if (AbilityReady("Forage")) {
+			if (pChSpawn->StandState == STANDSTATE_SIT) {
+				DoCommand(pChSpawn, "/stand");
+				WasSitting=true;
+			} else if (((PSPAWNINFO)pLocalPlayer)->CastingData.SpellETA == 0 || (GetCharInfo2()->Class == Bard)) {
+				HasForaged=true;
+				MyUseAbility("Forage");
+			}
+		}
+	}
+	if (!bWaitForCursor && ForageSuccess && IsForaging)
+	{
 		//WriteChatf("Turning ON bWaitForCursor");
 		bWaitForCursor = true;
-        ForageSuccess = false;
-    }
+		ForageSuccess = false;
+	}
 	if (bWaitForCursor)
 	{
-		if (PCHARINFO2 pCharInfo2 = GetCharInfo2())
+		if (auto pCharInfo2 = GetCharInfo2())
 		{
 			if (pCharInfo2->pInventoryArray->Inventory.Cursor)
 			{
@@ -161,91 +157,74 @@ PLUGIN_API VOID OnPulse(VOID)
 
 PLUGIN_API DWORD OnIncomingChat(PCHAR Line, DWORD Color)
 {
-    if (HasForaged && strstr(Line, "You have scrounged up"))
-    {
-        ForageSuccess=true;
-    }
-    else if (HasForaged && strstr(Line, "You fail to locate"))
-    {
-        ForageSuccess=false;
-        HasForaged=false;
-        KeepItem=false;
-        KeepDestroy=false;
-    }
-    else if (!IAmCamping && strstr(Line, "It will take you about 30 seconds to prepare your camp.")) {
+	if (HasForaged && strstr(Line, "You have scrounged up"))
+	{
+		ForageSuccess=true;
+	}
+	else if (HasForaged && strstr(Line, "You fail to locate"))
+	{
+		ForageSuccess=false;
+		HasForaged=false;
+		KeepItem=false;
+		KeepDestroy=false;
+	}
+	else if (!IAmCamping && strstr(Line, "It will take you about 30 seconds to prepare your camp.")) {
 		IAmCamping = true;
 	}
 	else if (IAmCamping && strstr(Line, "You abandon your preparations to camp.")) {
 		IAmCamping = false;
 	}
-    return 0;
+	return 0;
 }
 
 
 PLUGIN_API VOID SetGameState(DWORD GameState)
 {
-    if (GameState==GAMESTATE_INGAME)
-    {
-        if (GetCharInfo())
-        {
-            sprintf_s(INIFileName,"%s\\MQ2Forage_%s_%s.ini",gszINIPath,GetCharInfo()->Name,EQADDR_SERVERNAME);
-            Load_INI();
-            MQ2ForageEnabled=true;
-        }
-    }
-    else
-    {
-        MQ2ForageEnabled=false;
-    }
+	MQ2ForageEnabled = SetININame();
 }
 
 void StartForageCommand(PSPAWNINFO pChar, PCHAR szLine)
 {
-    if (MQ2ForageEnabled)
-    {
+	if (MQ2ForageEnabled)
+	{
 		WriteChatf("%s::Forage [\agEnabled\aw].",PLUGIN_NAME);
-        IsForaging=true;
+		IsForaging=true;
 		WritePrivateProfileString("General", "ForageOn", "On", INIFileName);
-    }
+	}
 }
 
 void StopForageCommand(PSPAWNINFO pChar, PCHAR szLine)
 {
-    if (MQ2ForageEnabled)
-    {
+	if (MQ2ForageEnabled)
+	{
 		WriteChatf("%s::Forage [\arDisabled\aw].",PLUGIN_NAME);
-        IsForaging=false;
+		IsForaging=false;
 		WritePrivateProfileString("General", "ForageOn", "Off", INIFileName);
-    }
+	}
 }
 
 void KeepItemCommand(PSPAWNINFO pChar, PCHAR szLine)
 {
-    char szZone[64];
-    PCHARINFO pCharInfo = GetCharInfo();
-
-    if (MQ2ForageEnabled)
-    {
+	if (MQ2ForageEnabled)
+	{
+		PCHARINFO pCharInfo = GetCharInfo();
 		WriteChatf("%s::Now auto-keeping item [\ag%s\aw].",PLUGIN_NAME, szLine);
-        sprintf_s(szZone,"%s",GetFullZone(pCharInfo->zoneId));
-        WritePrivateProfileString(szZone,szLine,"keep",INIFileName);
-    }
+		WritePrivateProfileString(GetFullZone(pCharInfo->zoneId), szLine, "keep", INIFileName);
+	}
 }
 
 void DestroyItemCommand(PSPAWNINFO pChar, PCHAR szLine)
 {
-    char szZone[64];
-    PCHARINFO pCharInfo = GetCharInfo();
-
-    if (MQ2ForageEnabled)
-    {
+	if (MQ2ForageEnabled)
+	{
+		PCHARINFO pCharInfo = GetCharInfo();
 		WriteChatf("%s::Now auto-destroying item [\ag%s\aw].",PLUGIN_NAME, szLine);
-        sprintf_s(szZone,"%s",GetFullZone(pCharInfo->zoneId));
-        WritePrivateProfileString(szZone,szLine,"destroy",INIFileName);
-    }
+		WritePrivateProfileString(GetFullZone(pCharInfo->zoneId), szLine, "destroy", INIFileName);
+	}
 }
 
-void MyUseAbility(PCHAR szLine) {
+void MyUseAbility(PCHAR szLine)
+{
 	if (PSPAWNINFO pChSpawn = GetCharInfo()->pSpawn) {
 		char temp[MAX_STRING] = "";
 		sprintf_s(temp, "\"%s", szLine);
@@ -258,14 +237,12 @@ bool AbilityReady(PCHAR szSkillName)
 {
 	if (!InGame())
 		return false;
-	PSPAWNINFO me = GetCharInfo()->pSpawn;
 	for (int i = 0; i < NUM_SKILLS; i++) {
-		DWORD nToken = pCSkillMgr->GetNameToken(i);
 		if (HasSkill(i)) {
-			if (char* thename = pStringTable->getString(nToken, 0)) {
+			if (const char* thename = pStringTable->getString(pCSkillMgr->GetNameToken(i), nullptr)) {
 				if (!_stricmp(szSkillName, thename))
 				{
-					if (bool bActivated = pCSkillMgr->IsActivatedSkill(i))
+					if (pCSkillMgr->IsActivatedSkill(i))
 					{
 						return pCSkillMgr->IsAvailable(i);
 					}
@@ -282,7 +259,7 @@ inline bool InGame()
 	return(GetGameState() == GAMESTATE_INGAME && GetCharInfo() && GetCharInfo()->pSpawn && GetCharInfo2());
 }
 
-void VerifyINI(char Section[MAX_STRING], char Key[MAX_STRING], char Default[MAX_STRING], char ININame[MAX_STRING])
+void VerifyINI(char* Section, char* Key, char* Default, char* ININame)
 {
 	char temp[MAX_STRING] = { 0 };
 	if (GetPrivateProfileString(Section, Key, 0, temp, MAX_STRING, ININame) == 0)
@@ -291,11 +268,9 @@ void VerifyINI(char Section[MAX_STRING], char Key[MAX_STRING], char Default[MAX_
 	}
 }
 
-bool atob(char x[MAX_STRING])
+bool atob(const char* x)
 {
-	for (int i = 0; i < 4; i++)
-		x[i] = tolower(x[i]);
-	if (!_stricmp(x, "true") || atoi(x) != 0 || !_stricmp(x, "on"))
+	if (!_stricmp(x, "true") || !_stricmp(x, "on") || atoi(x) != 0)
 		return true;
 	return false;
 }
@@ -304,7 +279,7 @@ void HandleItem()
 {
 	if (PSPAWNINFO pChSpawn = (PSPAWNINFO)pLocalPlayer)
 	{
-		if (PCHARINFO2 pChar2 = GetCharInfo2())
+		if (const auto pChar2 = GetCharInfo2())
 		{
 			PCONTENTS pCont = pChar2->pInventoryArray->Inventory.Cursor;
 			if (PITEMINFO pCursor = GetItemFromContents(pCont))
@@ -367,9 +342,9 @@ void HandleItem()
 	}
 }
 
-void Load_INI(VOID)
+void Load_INI()
 {
-    char temp[MAX_STRING];
+	char temp[MAX_STRING];
 	//AutoKeepEnabled/AutoKeepAll
 	VerifyINI("General", "AutoKeepAll", "on", INIFileName);
 	GetPrivateProfileString("General", "AutoKeepAll", "on", temp, MAX_STRING, INIFileName);
@@ -386,60 +361,42 @@ void Load_INI(VOID)
 	IsForaging = atob(temp);
 }
 
-bool Check_INI(VOID)
+bool Check_INI()
 {
-    char szTemp[MAX_STRING];
-    char szKeep[MAX_STRING];
-    char szItem[64];
-    char szZone[64];
-    bool ItemSetting=false;
-    PCHARINFO pChar = GetCharInfo();
-    PITEMINFO pCursor = GetItemFromContents(GetCharInfo2()->pInventoryArray->Inventory.Cursor);
-    sprintf_s(szItem,"%s",pCursor->Name);
-    sprintf_s(szZone,"%s",GetFullZone(pChar->zoneId));
-    sprintf_s(szKeep,"%s",AutoKeepEnabled?"keep":"destroy");
-    GetPrivateProfileString(szZone,szItem,"NULL",szTemp,MAX_STRING,INIFileName);
-    if (strstr(szTemp,"NULL"))
-    {
-        if (AutoKeepEnabled)
-        {
-            ItemSetting=true;
-        }
+	char szTemp[MAX_STRING];
+	char szKeep[MAX_STRING];
+	bool ItemSetting=false;
+	PCHARINFO pChar = GetCharInfo();
+	PITEMINFO pCursor = GetItemFromContents(GetCharInfo2()->pInventoryArray->Inventory.Cursor);
+	sprintf_s(szKeep, "%s", AutoKeepEnabled ? "keep" : "destroy");
+	GetPrivateProfileString(GetFullZone(pChar->zoneId), pCursor->Name, "NULL", szTemp, MAX_STRING, INIFileName);
+	if (strstr(szTemp,"NULL"))
+	{
+		if (AutoKeepEnabled)
+		{
+			ItemSetting=true;
+		}
 
-        if (AutoAddEnabled)
-        {
-            WritePrivateProfileString(szZone,szItem,szKeep,INIFileName);
-        }
-    }
-    else if (strstr(szTemp,"keep"))
-    {
-        ItemSetting=true;
-    }
-    else if (strstr(szTemp,"destroy"))
-    {
-        ItemSetting=false;
-    }
-    else
-    {
-		WriteChatf("%s::\arBad status in ini for item %s in zone %s. Using global setting\ax.",PLUGIN_NAME, szItem, szZone);
-        if (AutoKeepEnabled)
-        {
-            ItemSetting=true;
-        }
-    }
-    return ItemSetting;
-}
-
-// Added by Jaq -- Ripped off from mq2MoveUtils
-bool IsBardClass()
-{
-    if (strncmp(pEverQuest->GetClassDesc(GetCharInfo2()->Class & 0xff),"Bard",5))
-    {
-        return false;
-    }
-    else
-    {
-        return true;
-    }
-
+		if (AutoAddEnabled)
+		{
+			WritePrivateProfileString(GetFullZone(pChar->zoneId), pCursor->Name, szKeep, INIFileName);
+		}
+	}
+	else if (strstr(szTemp,"keep"))
+	{
+		ItemSetting=true;
+	}
+	else if (strstr(szTemp,"destroy"))
+	{
+		ItemSetting=false;
+	}
+	else
+	{
+		WriteChatf("%s::\arBad status in ini for item %s in zone %s. Using global setting\ax.", PLUGIN_NAME, pCursor->Name, GetFullZone(pChar->zoneId));
+		if (AutoKeepEnabled)
+		{
+			ItemSetting=true;
+		}
+	}
+	return ItemSetting;
 }
