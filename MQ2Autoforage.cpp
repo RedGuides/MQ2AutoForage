@@ -24,7 +24,7 @@
                             - Fixed crash on full inventory.
 */
 
-#include "../MQ2Plugin.h"
+#include <mq/Plugin.h>
 
 constexpr const char* PLUGIN_NAME = "MQ2AutoForage";
 
@@ -60,7 +60,7 @@ bool SetININame()
 {
 	if (gGameState==GAMESTATE_INGAME && GetCharInfo())
 	{
-		sprintf_s(INIFileName,"%s\\MQ2Forage_%s_%s.ini", gszINIPath, GetCharInfo()->Name, EQADDR_SERVERNAME);
+		sprintf_s(INIFileName,"%s\\MQ2Forage_%s_%s.ini", gPathConfig, GetCharInfo()->Name, EQADDR_SERVERNAME);
 		Load_INI();
 		return true;
 	}
@@ -68,7 +68,7 @@ bool SetININame()
 	return false;
 }
 
-PLUGIN_API VOID InitializePlugin()
+PLUGIN_API void InitializePlugin()
 {
 	AddCommand("/startforage",StartForageCommand);
 	AddCommand("/stopforage",StopForageCommand);
@@ -77,7 +77,7 @@ PLUGIN_API VOID InitializePlugin()
 	MQ2ForageEnabled = SetININame();
 }
 
-PLUGIN_API VOID ShutdownPlugin()
+PLUGIN_API void ShutdownPlugin()
 {
 	RemoveCommand("/startforage");
 	RemoveCommand("/stopforage");
@@ -85,7 +85,7 @@ PLUGIN_API VOID ShutdownPlugin()
 	RemoveCommand("/destroyitem");
 }
 
-PLUGIN_API VOID OnZoned()
+PLUGIN_API void OnZoned()
 {
 	//If I switch characters and IAmCamping is still true and I finish zoning, and the gamestate is ingame...
 	if (IAmCamping && GetGameState() == GAMESTATE_INGAME)
@@ -93,7 +93,7 @@ PLUGIN_API VOID OnZoned()
 	Load_INI();
 }
 
-PLUGIN_API VOID OnPulse()
+PLUGIN_API void OnPulse()
 {
 	static int Pulse = 0;
 
@@ -123,7 +123,7 @@ PLUGIN_API VOID OnPulse()
 			if (pChSpawn->StandState == STANDSTATE_SIT) {
 				DoCommand(pChSpawn, "/stand");
 				WasSitting=true;
-			} else if (((PSPAWNINFO)pLocalPlayer)->CastingData.SpellETA == 0 || (GetCharInfo2()->Class == Bard)) {
+			} else if (((PSPAWNINFO)pLocalPlayer)->CastingData.SpellETA == 0 || (GetPcProfile()->Class == Bard)) {
 				HasForaged=true;
 				MyUseAbility("Forage");
 			}
@@ -137,7 +137,7 @@ PLUGIN_API VOID OnPulse()
 	}
 	if (bWaitForCursor)
 	{
-		if (auto pCharInfo2 = GetCharInfo2())
+		if (auto pCharInfo2 = GetPcProfile())
 		{
 			if (pCharInfo2->pInventoryArray->Inventory.Cursor)
 			{
@@ -159,7 +159,7 @@ PLUGIN_API VOID OnPulse()
 	}
 }
 
-PLUGIN_API DWORD OnIncomingChat(PCHAR Line, DWORD Color)
+PLUGIN_API bool OnIncomingChat(const char* Line, DWORD Color)
 {
 	if (HasForaged && strstr(Line, "You have scrounged up"))
 	{
@@ -182,7 +182,7 @@ PLUGIN_API DWORD OnIncomingChat(PCHAR Line, DWORD Color)
 }
 
 
-PLUGIN_API VOID SetGameState(DWORD GameState)
+PLUGIN_API void SetGameState(int GameState)
 {
 	MQ2ForageEnabled = SetININame();
 }
@@ -260,7 +260,7 @@ bool AbilityReady(PCHAR szSkillName)
 
 inline bool InGame()
 {
-	return(GetGameState() == GAMESTATE_INGAME && GetCharInfo() && GetCharInfo()->pSpawn && GetCharInfo2());
+	return(GetGameState() == GAMESTATE_INGAME && GetCharInfo() && GetCharInfo()->pSpawn && GetPcProfile());
 }
 
 void VerifyINI(char* Section, char* Key, char* Default, char* ININame)
@@ -272,18 +272,11 @@ void VerifyINI(char* Section, char* Key, char* Default, char* ININame)
 	}
 }
 
-bool atob(const char* x)
-{
-	if (!_stricmp(x, "true") || !_stricmp(x, "on") || atoi(x) != 0)
-		return true;
-	return false;
-}
-
 void HandleItem()
 {
 	if (PSPAWNINFO pChSpawn = (PSPAWNINFO)pLocalPlayer)
 	{
-		if (const auto pChar2 = GetCharInfo2())
+		if (const auto pChar2 = GetPcProfile())
 		{
 			PCONTENTS pCont = pChar2->pInventoryArray->Inventory.Cursor;
 			if (PITEMINFO pCursor = GetItemFromContents(pCont))
@@ -352,17 +345,17 @@ void Load_INI()
 	//AutoKeepEnabled/AutoKeepAll
 	VerifyINI("General", "AutoKeepAll", "on", INIFileName);
 	GetPrivateProfileString("General", "AutoKeepAll", "on", temp, MAX_STRING, INIFileName);
-	AutoKeepEnabled = atob(temp);
+	AutoKeepEnabled = GetBoolFromString(temp, AutoKeepEnabled);
 
 	//AutoAddAll
 	VerifyINI("General", "AutoAddAll", "on", INIFileName);
 	GetPrivateProfileString("General", "AutoAddAll", "on", temp, MAX_STRING, INIFileName);
-	AutoAddEnabled = atob(temp);
+	AutoAddEnabled = GetBoolFromString(temp, AutoAddEnabled);
 
 	//Saving the last state of the /startforage /stopforage default is On.
 	VerifyINI("General", "ForageOn", "on", INIFileName);
 	GetPrivateProfileString("General", "ForageOn", "on", temp, MAX_STRING, INIFileName);
-	IsForaging = atob(temp);
+	IsForaging = GetBoolFromString(temp, IsForaging);
 }
 
 bool Check_INI()
@@ -371,7 +364,7 @@ bool Check_INI()
 	char szKeep[MAX_STRING];
 	bool ItemSetting=false;
 	PCHARINFO pChar = GetCharInfo();
-	PITEMINFO pCursor = GetItemFromContents(GetCharInfo2()->pInventoryArray->Inventory.Cursor);
+	PITEMINFO pCursor = GetItemFromContents(GetPcProfile()->pInventoryArray->Inventory.Cursor);
 	sprintf_s(szKeep, "%s", AutoKeepEnabled ? "keep" : "destroy");
 	GetPrivateProfileString(GetFullZone(pChar->zoneId), pCursor->Name, "NULL", szTemp, MAX_STRING, INIFileName);
 	if (strstr(szTemp,"NULL"))
