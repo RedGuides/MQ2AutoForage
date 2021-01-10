@@ -137,9 +137,9 @@ PLUGIN_API void OnPulse()
 	}
 	if (bWaitForCursor)
 	{
-		if (auto pCharInfo2 = GetPcProfile())
+		if (auto pProfile = GetPcProfile())
 		{
-			if (pCharInfo2->pInventoryArray->Inventory.Cursor)
+			if (pProfile->GetInventorySlot(InvSlot_Cursor))
 			{
 				if (!bHandleCalled)
 				{
@@ -149,11 +149,14 @@ PLUGIN_API void OnPulse()
 				HandleItem();
 				return;
 			}
-			if (bHandleCalled && !pCharInfo2->pInventoryArray->Inventory.Cursor)
+			else
 			{
-				//WriteChatf("Turning off bHandleCalled and bWaitForCursor");
-				bHandleCalled = false;
-				bWaitForCursor = false;
+				if (bHandleCalled)
+				{
+					//WriteChatf("Turning off bHandleCalled and bWaitForCursor");
+					bHandleCalled = false;
+					bWaitForCursor = false;
+				}
 			}
 		}
 	}
@@ -278,7 +281,7 @@ void HandleItem()
 	{
 		if (const auto pChar2 = GetPcProfile())
 		{
-			PCONTENTS pCont = pChar2->pInventoryArray->Inventory.Cursor;
+			ItemClient* pCont = pChar2->GetInventorySlot(InvSlot_Cursor);
 			if (PITEMINFO pCursor = GetItemFromContents(pCont))
 			{
 				CHAR szItem[64] = { 0 };
@@ -292,7 +295,7 @@ void HandleItem()
 					{
 						bool bTurnItOff = true;
 						//check if we can stack it
-						if (((EQ_Item*)pCont)->IsStackable())
+						if (pCont->IsStackable())
 						{
 							int freestack = GetFreeStack(pCont);
 							if (freestack >= pCont->StackCount)
@@ -322,7 +325,7 @@ void HandleItem()
 					WriteChatf("%s::Destroying [\ag%s\aw].", PLUGIN_NAME, szItem);
 					DoCommand(pChSpawn, "/destroy");
 				}
-				if (!pChar2->pInventoryArray->Inventory.Cursor)
+				if (!pChar2->GetInventorySlot(InvSlot_Cursor))
 				{
 					KeepDestroy = false;
 					KeepItem = false;
@@ -364,7 +367,7 @@ bool Check_INI()
 	char szKeep[MAX_STRING];
 	bool ItemSetting=false;
 	PCHARINFO pChar = GetCharInfo();
-	PITEMINFO pCursor = GetItemFromContents(GetPcProfile()->pInventoryArray->Inventory.Cursor);
+	PITEMINFO pCursor = GetItemFromContents(GetPcProfile()->GetInventorySlot(InvSlot_Cursor));
 	sprintf_s(szKeep, "%s", AutoKeepEnabled ? "keep" : "destroy");
 	GetPrivateProfileString(GetFullZone(pChar->zoneId), pCursor->Name, "NULL", szTemp, MAX_STRING, INIFileName);
 	if (strstr(szTemp,"NULL"))
