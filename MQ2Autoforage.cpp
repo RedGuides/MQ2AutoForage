@@ -143,7 +143,6 @@ PLUGIN_API void OnPulse()
 					bHandleCalled = true;
 				}
 				HandleItem();
-				return;
 			}
 			else
 			{
