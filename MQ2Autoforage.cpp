@@ -113,7 +113,11 @@ PLUGIN_API VOID OnPulse()
 	}
 	PSPAWNINFO pChSpawn = GetCharInfo()->pSpawn;
 
-	if ((IsForaging) && !(*EQADDR_ATTACK > 0) && !(PCSIDLWND)pSpellBookWnd->IsVisible() && !(PCSIDLWND)pGiveWnd->IsVisible() && !(PCSIDLWND)pBankWnd->IsVisible() && !(PCSIDLWND)pMerchantWnd->IsVisible() && !(PCSIDLWND)pTradeWnd->IsVisible() && !(PCSIDLWND)pLootWnd->IsVisible() && !IAmCamping)// && !GetCharInfo()->pSpawn->Mount) {
+	if ((IsForaging) && !(*EQADDR_ATTACK > 0) && !(PCSIDLWND)pSpellBookWnd->IsVisible() &&
+		!(PCSIDLWND)pGiveWnd->IsVisible() && !(PCSIDLWND)pBankWnd->IsVisible() &&
+		!(PCSIDLWND)pMerchantWnd->IsVisible() && !(PCSIDLWND)pTradeWnd->IsVisible() &&
+		!(PCSIDLWND)pLootWnd->IsVisible() && !IAmCamping && pChSpawn->StandState != STANDSTATE_FEIGN &&
+		pChSpawn->StandState != STANDSTATE_DEAD)// && !GetCharInfo()->pSpawn->Mount) {
 	{
 		if (AbilityReady("Forage")) {
 			if (pChSpawn->StandState == STANDSTATE_SIT) {
