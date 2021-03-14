@@ -61,6 +61,10 @@ bool SetININame()
 	if (gGameState==GAMESTATE_INGAME && GetCharInfo())
 	{
 		sprintf_s(INIFileName,"%s\\MQ2Forage_%s_%s.ini", gszINIPath, GetCharInfo()->Name, EQADDR_SERVERNAME);
+		if (!_FileExists(INIFileName))
+			sprintf_s(INIFileName,"%s\\MQ2Forage_%s.ini", gszINIPath, EQADDR_SERVERNAME);
+		if (!_FileExists(INIFileName))
+			sprintf_s(INIFileName,"%s\\MQ2Forage.ini", gszINIPath);	
 		Load_INI();
 		return true;
 	}
