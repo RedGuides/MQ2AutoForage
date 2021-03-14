@@ -248,12 +248,12 @@ bool AbilityReady(PCHAR szSkillName)
 		return false;
 	for (int i = 0; i < NUM_SKILLS; i++) {
 		if (HasSkill(i)) {
-			if (const char* thename = pStringTable->getString(pCSkillMgr->GetNameToken(i), nullptr)) {
+			if (const char* thename = pStringTable->getString(pSkillMgr->GetNameToken(i), nullptr)) {
 				if (!_stricmp(szSkillName, thename))
 				{
-					if (pCSkillMgr->IsActivatedSkill(i))
+					if (pSkillMgr->IsActivatedSkill(i))
 					{
-						return pCSkillMgr->IsAvailable(i);
+						return pSkillMgr->IsAvailable(i);
 					}
 					break;
 				}
