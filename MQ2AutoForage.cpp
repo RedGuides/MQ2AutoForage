@@ -29,7 +29,7 @@
 constexpr const char* PLUGIN_NAME = "MQ2AutoForage";
 
 PreSetup(PLUGIN_NAME);
-PLUGIN_VERSION(2.3);
+PLUGIN_VERSION(2.4);
 
 void StartForageCommand(PSPAWNINFO pChar, PCHAR szLine);
 void StopForageCommand(PSPAWNINFO pChar, PCHAR szLine);
@@ -87,6 +87,20 @@ PLUGIN_API void ShutdownPlugin()
 	RemoveCommand("/stopforage");
 	RemoveCommand("/keepitem");
 	RemoveCommand("/destroyitem");
+}
+
+PCHAR GetItemSectionName(PCHAR szItemName)
+{
+	PCHARINFO pChar = GetCharInfo();
+	PCHAR zoneName = GetFullZone(pChar->zoneId);
+
+	char szTemp[MAX_STRING];
+	GetPrivateProfileString(zoneName, szItemName, "NULL", szTemp, MAX_STRING, INIFileName);
+	if (!strstr(szTemp, "NULL"))
+	{
+		return zoneName;
+	}
+	return "Global";
 }
 
 PLUGIN_API void OnZoned()
@@ -216,9 +230,8 @@ void KeepItemCommand(PSPAWNINFO pChar, PCHAR szLine)
 {
 	if (MQ2ForageEnabled)
 	{
-		PCHARINFO pCharInfo = GetCharInfo();
 		WriteChatf("%s::Now auto-keeping item [\ag%s\aw].",PLUGIN_NAME, szLine);
-		WritePrivateProfileString(GetFullZone(pCharInfo->zoneId), szLine, "keep", INIFileName);
+		WritePrivateProfileString(GetItemSectionName(szLine), szLine, "keep", INIFileName);
 	}
 }
 
@@ -226,9 +239,8 @@ void DestroyItemCommand(PSPAWNINFO pChar, PCHAR szLine)
 {
 	if (MQ2ForageEnabled)
 	{
-		PCHARINFO pCharInfo = GetCharInfo();
 		WriteChatf("%s::Now auto-destroying item [\ag%s\aw].",PLUGIN_NAME, szLine);
-		WritePrivateProfileString(GetFullZone(pCharInfo->zoneId), szLine, "destroy", INIFileName);
+		WritePrivateProfileString(GetItemSectionName(szLine), szLine, "destroy", INIFileName);
 	}
 }
 
@@ -368,10 +380,10 @@ bool Check_INI()
 	char szTemp[MAX_STRING];
 	char szKeep[MAX_STRING];
 	bool ItemSetting=false;
-	PCHARINFO pChar = GetCharInfo();
 	PITEMINFO pCursor = GetItemFromContents(GetPcProfile()->GetInventorySlot(InvSlot_Cursor));
+	PCHAR pSectionName = GetItemSectionName(pCursor->Name);
 	sprintf_s(szKeep, "%s", AutoKeepEnabled ? "keep" : "destroy");
-	GetPrivateProfileString(GetFullZone(pChar->zoneId), pCursor->Name, "NULL", szTemp, MAX_STRING, INIFileName);
+	GetPrivateProfileString(pSectionName, pCursor->Name, "NULL", szTemp, MAX_STRING, INIFileName);
 	if (strstr(szTemp,"NULL"))
 	{
 		if (AutoKeepEnabled)
@@ -381,7 +393,7 @@ bool Check_INI()
 
 		if (AutoAddEnabled)
 		{
-			WritePrivateProfileString(GetFullZone(pChar->zoneId), pCursor->Name, szKeep, INIFileName);
+			WritePrivateProfileString(pSectionName, pCursor->Name, szKeep, INIFileName);
 		}
 	}
 	else if (strstr(szTemp,"keep"))
@@ -394,7 +406,7 @@ bool Check_INI()
 	}
 	else
 	{
-		WriteChatf("%s::\arBad status in ini for item %s in zone %s. Using global setting\ax.", PLUGIN_NAME, pCursor->Name, GetFullZone(pChar->zoneId));
+		WriteChatf("%s::\arBad status in ini for item %s in zone %s. Using global setting\ax.", PLUGIN_NAME, pCursor->Name, pSectionName);
 		if (AutoKeepEnabled)
 		{
 			ItemSetting=true;
