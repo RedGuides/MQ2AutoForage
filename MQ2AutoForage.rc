@@ -51,8 +51,8 @@ END
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 2,3
- PRODUCTVERSION 2,3
+ FILEVERSION 2,4
+ PRODUCTVERSION 2,4
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -73,11 +73,11 @@ BEGIN
 #else
             VALUE "FileDescription", "MQ2AutoForage Release Version"
 #endif
-            VALUE "FileVersion", "2.3"
+            VALUE "FileVersion", "2.4"
             VALUE "InternalName", "MQ2AutoForage.dll"
             VALUE "OriginalFilename", "MQ2AutoForage.dll"
             VALUE "ProductName", "MQ2AutoForage"
-            VALUE "ProductVersion", "2.3"
+            VALUE "ProductVersion", "2.4"
         END
     END
     BLOCK "VarFileInfo"

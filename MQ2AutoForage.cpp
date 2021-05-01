@@ -72,6 +72,20 @@ bool SetININame()
 	return false;
 }
 
+const char* GetItemSectionName(const char* szItemName)
+{
+	PcClient* pChar = GetCharInfo();
+	const char* zoneName = GetFullZone(pChar->zoneId);
+
+	char szTemp[MAX_STRING];
+	GetPrivateProfileString(zoneName, szItemName, "NULL", szTemp, MAX_STRING, INIFileName);
+	if (strcmp(szTemp, "NULL") == 0)
+	{
+		return zoneName;
+	}
+	return "Global";
+}
+
 PLUGIN_API void InitializePlugin()
 {
 	AddCommand("/startforage",StartForageCommand);
@@ -87,20 +101,6 @@ PLUGIN_API void ShutdownPlugin()
 	RemoveCommand("/stopforage");
 	RemoveCommand("/keepitem");
 	RemoveCommand("/destroyitem");
-}
-
-PCHAR GetItemSectionName(PCHAR szItemName)
-{
-	PCHARINFO pChar = GetCharInfo();
-	PCHAR zoneName = GetFullZone(pChar->zoneId);
-
-	char szTemp[MAX_STRING];
-	GetPrivateProfileString(zoneName, szItemName, "NULL", szTemp, MAX_STRING, INIFileName);
-	if (!strstr(szTemp, "NULL"))
-	{
-		return zoneName;
-	}
-	return "Global";
 }
 
 PLUGIN_API void OnZoned()
@@ -380,8 +380,8 @@ bool Check_INI()
 	char szTemp[MAX_STRING];
 	char szKeep[MAX_STRING];
 	bool ItemSetting=false;
-	PITEMINFO pCursor = GetItemFromContents(GetPcProfile()->GetInventorySlot(InvSlot_Cursor));
-	PCHAR pSectionName = GetItemSectionName(pCursor->Name);
+	ItemDefinition* pCursor = GetItemFromContents(GetPcProfile()->GetInventorySlot(InvSlot_Cursor));
+	const char* pSectionName = GetItemSectionName(pCursor->Name);
 	sprintf_s(szKeep, "%s", AutoKeepEnabled ? "keep" : "destroy");
 	GetPrivateProfileString(pSectionName, pCursor->Name, "NULL", szTemp, MAX_STRING, INIFileName);
 	if (strstr(szTemp,"NULL"))
