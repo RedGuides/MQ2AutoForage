@@ -31,12 +31,12 @@ constexpr const char* PLUGIN_NAME = "MQ2AutoForage";
 PreSetup(PLUGIN_NAME);
 PLUGIN_VERSION(2.4);
 
-void StartForageCommand(PSPAWNINFO pChar, PCHAR szLine);
-void StopForageCommand(PSPAWNINFO pChar, PCHAR szLine);
-void KeepItemCommand(PSPAWNINFO pChar, PCHAR szLine);
-void DestroyItemCommand(PSPAWNINFO pChar, PCHAR szLine);
-void MyUseAbility(PCHAR szLine);
-bool AbilityReady(PCHAR szSkillName);
+void StartForageCommand(PlayerClient* pChar, const char* szLine);
+void StopForageCommand(PlayerClient* pChar, const char* szLine);
+void KeepItemCommand(PlayerClient* pChar, const char* szLine);
+void DestroyItemCommand(PlayerClient* pChar,  const char* szLine);
+void MyUseAbility(const char* szLine);
+bool AbilityReady(const char* szSkillName);
 inline bool InGame();
 void HandleItem();
 void Load_INI();
@@ -129,7 +129,7 @@ PLUGIN_API void OnPulse()
 	{
 		return;
 	}
-	PSPAWNINFO pChSpawn = GetCharInfo()->pSpawn;
+	PlayerClient* pChSpawn = pLocalPlayer;
 
 	if ((IsForaging) && !pEverQuestInfo->bAutoAttack && !pSpellBookWnd->IsVisible()
 		&& !pGiveWnd->IsVisible() && !pBankWnd->IsVisible() && !pMerchantWnd->IsVisible()
@@ -140,7 +140,7 @@ PLUGIN_API void OnPulse()
 			if (pChSpawn->StandState == STANDSTATE_SIT) {
 				DoCommand(pChSpawn, "/stand");
 				WasSitting=true;
-			} else if (((PSPAWNINFO)pLocalPlayer)->CastingData.SpellETA == 0 || (GetPcProfile()->Class == Bard)) {
+			} else if (pLocalPlayer->CastingData.SpellETA == 0 || (GetPcProfile()->Class == Bard)) {
 				HasForaged=true;
 				MyUseAbility("Forage");
 			}
@@ -206,7 +206,7 @@ PLUGIN_API void SetGameState(int GameState)
 	MQ2ForageEnabled = SetININame();
 }
 
-void StartForageCommand(PSPAWNINFO pChar, PCHAR szLine)
+void StartForageCommand(PlayerClient* pChar,  const char* szLine)
 {
 	if (MQ2ForageEnabled)
 	{
@@ -216,7 +216,7 @@ void StartForageCommand(PSPAWNINFO pChar, PCHAR szLine)
 	}
 }
 
-void StopForageCommand(PSPAWNINFO pChar, PCHAR szLine)
+void StopForageCommand(PlayerClient* pChar,  const char* szLine)
 {
 	if (MQ2ForageEnabled)
 	{
@@ -226,7 +226,7 @@ void StopForageCommand(PSPAWNINFO pChar, PCHAR szLine)
 	}
 }
 
-void KeepItemCommand(PSPAWNINFO pChar, PCHAR szLine)
+void KeepItemCommand(PlayerClient* pChar,  const char* szLine)
 {
 	if (MQ2ForageEnabled)
 	{
@@ -235,7 +235,7 @@ void KeepItemCommand(PSPAWNINFO pChar, PCHAR szLine)
 	}
 }
 
-void DestroyItemCommand(PSPAWNINFO pChar, PCHAR szLine)
+void DestroyItemCommand(PlayerClient* pChar,  const char* szLine)
 {
 	if (MQ2ForageEnabled)
 	{
@@ -244,9 +244,9 @@ void DestroyItemCommand(PSPAWNINFO pChar, PCHAR szLine)
 	}
 }
 
-void MyUseAbility(PCHAR szLine)
+void MyUseAbility(const char* szLine)
 {
-	if (PSPAWNINFO pChSpawn = GetCharInfo()->pSpawn) {
+	if (PlayerClient* pChSpawn = GetCharInfo()->pSpawn) {
 		char temp[MAX_STRING] = "";
 		sprintf_s(temp, "\"%s", szLine);
 		strcat_s(temp, MAX_STRING, "\"");
@@ -254,7 +254,7 @@ void MyUseAbility(PCHAR szLine)
 	}
 }
 
-bool AbilityReady(PCHAR szSkillName)
+bool AbilityReady(const char* szSkillName)
 {
 	if (!InGame())
 		return false;
@@ -291,14 +291,14 @@ void VerifyINI(char* Section, char* Key, char* Default, char* ININame)
 
 void HandleItem()
 {
-	if (PSPAWNINFO pChSpawn = (PSPAWNINFO)pLocalPlayer)
+	if (PlayerClient* pChSpawn = pLocalPlayer)
 	{
 		if (const auto pChar2 = GetPcProfile())
 		{
 			ItemClient* pCont = pChar2->GetInventorySlot(InvSlot_Cursor);
-			if (PITEMINFO pCursor = GetItemFromContents(pCont))
+			if (ItemDefinition* pCursor = GetItemFromContents(pCont))
 			{
-				CHAR szItem[64] = { 0 };
+				char szItem[64] = { 0 };
 				sprintf_s(szItem, "%s", pCursor->Name);
 				KeepDestroy = true;
 				KeepItem = Check_INI();
@@ -321,7 +321,7 @@ void HandleItem()
 						{
 							//Beep(1000, 100);
 							WriteChatf("%s::Turning \arOFF\aw Foraging, your inventory is FULL.", PLUGIN_NAME);
-							StopForageCommand((PSPAWNINFO)pLocalPlayer, "");
+							StopForageCommand(pLocalPlayer, "");
 							if (freeslots == 1)
 							{
 								HideDoCommand(pChSpawn, "/autoinventory", 0);
