@@ -129,16 +129,15 @@ PLUGIN_API void OnPulse()
 	{
 		return;
 	}
-	PlayerClient* pChSpawn = pLocalPlayer;
 
 	if ((IsForaging) && !pEverQuestInfo->bAutoAttack && !pSpellBookWnd->IsVisible()
 		&& !pGiveWnd->IsVisible() && !pBankWnd->IsVisible() && !pMerchantWnd->IsVisible()
 		&& !pTradeWnd->IsVisible() && !pLootWnd->IsVisible() && !IAmCamping
-		&& pChSpawn->StandState != STANDSTATE_FEIGN && pChSpawn->StandState != STANDSTATE_DEAD)// && !GetCharInfo()->pSpawn->Mount) {
+		&& pLocalPlayer->StandState != STANDSTATE_FEIGN && pLocalPlayer->StandState != STANDSTATE_DEAD)// && !GetCharInfo()->pSpawn->Mount) {
 	{
 		if (AbilityReady("Forage")) {
-			if (pChSpawn->StandState == STANDSTATE_SIT) {
-				DoCommand(pChSpawn, "/stand");
+			if (pLocalPlayer->StandState == STANDSTATE_SIT) {
+				DoCommand(pLocalPlayer, "/stand");
 				WasSitting=true;
 			} else if (pLocalPlayer->CastingData.SpellETA == 0 || (GetPcProfile()->Class == Bard)) {
 				HasForaged=true;
@@ -246,11 +245,11 @@ void DestroyItemCommand(PlayerClient* pChar,  const char* szLine)
 
 void MyUseAbility(const char* szLine)
 {
-	if (PlayerClient* pChSpawn = GetCharInfo()->pSpawn) {
+	if (pLocalPlayer) {
 		char temp[MAX_STRING] = "";
 		sprintf_s(temp, "\"%s", szLine);
 		strcat_s(temp, MAX_STRING, "\"");
-		DoAbility(pChSpawn, temp);
+		DoAbility(pLocalPlayer, temp);
 	}
 }
 
@@ -291,15 +290,13 @@ void VerifyINI(char* Section, char* Key, char* Default, char* ININame)
 
 void HandleItem()
 {
-	if (PlayerClient* pChSpawn = pLocalPlayer)
+	if (pLocalPlayer)
 	{
 		if (const auto pChar2 = GetPcProfile())
 		{
 			ItemClient* pCont = pChar2->GetInventorySlot(InvSlot_Cursor);
-			if (ItemDefinition* pCursor = GetItemFromContents(pCont))
+			if (ItemDefinition* pCursor = pCont->GetItemDefinition())
 			{
-				char szItem[64] = { 0 };
-				sprintf_s(szItem, "%s", pCursor->Name);
 				KeepDestroy = true;
 				KeepItem = Check_INI();
 				if (KeepItem)
@@ -324,20 +321,20 @@ void HandleItem()
 							StopForageCommand(pLocalPlayer, "");
 							if (freeslots == 1)
 							{
-								HideDoCommand(pChSpawn, "/autoinventory", 0);
+								HideDoCommand(pLocalPlayer, "/autoinventory", 0);
 							}
 							bWaitForCursor = false;
 							bHandleCalled = false;
 							return;
 						}
 					}
-					WriteChatf("%s::Keeping [\ag%s\aw].", PLUGIN_NAME, szItem);
-					HideDoCommand(pChSpawn, "/autoinventory", 0);
+					WriteChatf("%s::Keeping [\ag%s\aw].", PLUGIN_NAME, pCursor->Name);
+					HideDoCommand(pLocalPlayer, "/autoinventory", 0);
 				}
 				else
 				{
-					WriteChatf("%s::Destroying [\ag%s\aw].", PLUGIN_NAME, szItem);
-					DoCommand(pChSpawn, "/destroy");
+					WriteChatf("%s::Destroying [\ag%s\aw].", PLUGIN_NAME, pCursor->Name);
+					DoCommand(pLocalPlayer, "/destroy");
 				}
 				if (!pChar2->GetInventorySlot(InvSlot_Cursor))
 				{
@@ -349,7 +346,7 @@ void HandleItem()
 				if (!ForageSuccess && WasSitting)
 				{
 					WasSitting = false;
-					DoCommand(pChSpawn, "/sit");
+					DoCommand(pLocalPlayer, "/sit");
 				}
 			}
 		}
