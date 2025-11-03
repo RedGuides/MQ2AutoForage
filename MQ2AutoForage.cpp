@@ -196,7 +196,7 @@ PLUGIN_API bool OnIncomingChat(const char* Line, DWORD Color)
 	else if (IAmCamping && strstr(Line, "You abandon your preparations to camp.")) {
 		IAmCamping = false;
 	}
-	return 0;
+	return false;
 }
 
 
@@ -279,10 +279,10 @@ inline bool InGame()
 	return(GetGameState() == GAMESTATE_INGAME && GetCharInfo() && GetCharInfo()->pSpawn && GetPcProfile());
 }
 
-void VerifyINI(char* Section, char* Key, char* Default, char* ININame)
+void VerifyINI(const char* Section, const char* Key, const char* Default, const char* ININame)
 {
-	char temp[MAX_STRING] = { 0 };
-	if (GetPrivateProfileString(Section, Key, 0, temp, MAX_STRING, ININame) == 0)
+	char temp[MAX_STRING] = {};
+	if (GetPrivateProfileString(Section, Key, nullptr, temp, MAX_STRING, ININame) == 0)
 	{
 		WritePrivateProfileString(Section, Key, Default, ININame);
 	}
@@ -321,7 +321,7 @@ void HandleItem()
 							StopForageCommand(pLocalPlayer, "");
 							if (freeslots == 1)
 							{
-								HideDoCommand(pLocalPlayer, "/autoinventory", 0);
+								HideDoCommand(pLocalPlayer, "/autoinventory", false);
 							}
 							bWaitForCursor = false;
 							bHandleCalled = false;
@@ -329,7 +329,7 @@ void HandleItem()
 						}
 					}
 					WriteChatf("%s::Keeping [\ag%s\aw].", PLUGIN_NAME, pCursor->Name);
-					HideDoCommand(pLocalPlayer, "/autoinventory", 0);
+					HideDoCommand(pLocalPlayer, "/autoinventory", false);
 				}
 				else
 				{
